@@ -28,9 +28,15 @@ func downloadLatestRelease(OS string) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", err
 	}
+	var osName string
+	if OS == "mac" {
+		osName = "yt-dlp"
+	} else if OS == "win" {
+		osName = "yt-dlp.exe"
+	}
 	var url string
 	for _, asset := range release.Assets {
-		if asset.Name == "yt-dlp" {
+		if asset.Name == osName {
 			url = asset.BrowserDownloadURL
 			break
 		}
@@ -45,7 +51,7 @@ func downloadLatestRelease(OS string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	f, err := os.CreateTemp("", fmt.Sprintf("yt-dlp-temp-%s", OS))
+	f, err := os.CreateTemp("", fmt.Sprintf("*-%s", osName))
 	if err != nil {
 		return "", err
 	}
@@ -57,11 +63,11 @@ func downloadLatestRelease(OS string) (string, error) {
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		return "", err
 	}
-	log.Println(fmt.Sprintf("yt-dlp path: %s", f.Name()))
+	log.Printf("yt-dlp path: %s", f.Name())
 	return f.Name(), nil
 }
 
-func downloadLatestFfmpeg(OS string) (string, error) {
+func downloadLatestFfmpeg(OS string) (string, error) { // todo usuwanie ffmpeg zip'a
 	// Get the latest release info from GitHub API
 	resp, err := http.Get("https://ffbinaries.com/api/v1/version/latest")
 	if err != nil {
@@ -81,7 +87,13 @@ func downloadLatestFfmpeg(OS string) (string, error) {
 		return "", err
 	}
 
-	url := ffbinariesResponse.Bin["osx-64"]["ffmpeg"]
+	var osName string
+	if OS == "mac" {
+		osName = "osx-64"
+	} else if OS == "win" {
+		osName = "windows-64"
+	}
+	url := ffbinariesResponse.Bin[osName]["ffmpeg"]
 	if url == "" {
 		return "", fmt.Errorf("no executable found for %s", OS)
 	}
@@ -92,11 +104,14 @@ func downloadLatestFfmpeg(OS string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
-	f, err := os.CreateTemp("", fmt.Sprintf("ffmpeg-temp-%s*.zip", OS))
+	f, err := os.CreateTemp("", fmt.Sprintf("*-ffmpeg-%s.zip", osName))
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() {
+		f.Close()
+		os.Remove(f.Name())
+	}()
 	if _, err := io.Copy(f, resp.Body); err != nil {
 		return "", err
 	}
@@ -108,11 +123,14 @@ func downloadLatestFfmpeg(OS string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	log.Println(fmt.Sprintf("ffmpeg path: %s", f.Name()))
+	log.Printf("ffmpeg path: %s", f.Name())
+	f.Close()
+	os.Remove(f.Name())
 	return path, nil
 }
 
 func unzip(source string, OS string) (string, error) {
+	log.Printf("source: %s", source)
 	read, err := zip.OpenReader(source)
 	if err != nil {
 		return "", err
@@ -123,7 +141,13 @@ func unzip(source string, OS string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	f, err := os.CreateTemp("", fmt.Sprintf("ffmpeg-temp-%s", OS))
+	var osName string
+	if OS == "mac" {
+		osName = "ffmpeg"
+	} else if OS == "win" {
+		osName = "ffmpeg.exe"
+	}
+	f, err := os.CreateTemp("", fmt.Sprintf("*-%s", osName))
 	if err != nil {
 		return "", err
 	}

@@ -1,6 +1,6 @@
-module yt-simple-dl
+module github.com/domgan/yt-simple-dl
 
-go 1.17
+go 1.20
 
 require fyne.io/fyne/v2 v2.3.1
 

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"log"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
-	"strings"
 )
 
 func downloadHandler(window fyne.Window, input *widget.Entry, check *widget.Check, bottom *widget.Label) {
@@ -25,22 +27,21 @@ func downloadHandler(window fyne.Window, input *widget.Entry, check *widget.Chec
 	if err != nil {
 		bottom.SetText("ERROR :(")
 		dialog.ShowError(err, window)
+		log.Println("Error:", err)
 		// log.Panic
+	} else {
+		bottom.SetText("POBRANE :)")
 	}
-
-	bottom.SetText("POBRANE :)")
 }
 
 func main() {
 	a := app.New()
 	w := a.NewWindow("yt-simple-dl-gui")
-	w.Resize(fyne.Size{Width: 350})
-	w.SetFixedSize(true)
 
 	hello := widget.NewLabel("YouTube Simple DL!")
 	bottom := widget.NewLabel("")
 
-	check := widget.NewCheck("Convert to mp3", nil)
+	check := widget.NewCheck("Konwertuj do mp3", nil)
 	check.SetChecked(true)
 
 	input := widget.NewEntry()
@@ -58,5 +59,7 @@ func main() {
 		bottom,
 	))
 
+	w.Resize(fyne.Size{Width: 350})
+	w.SetFixedSize(true)
 	w.ShowAndRun()
 }
