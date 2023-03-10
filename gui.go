@@ -38,6 +38,11 @@ func main() {
 	a := app.New()
 	w := a.NewWindow("yt-simple-dl-gui")
 
+	w.SetOnClosed(func() {
+		log.Println("GUI window closed")
+		// killProcessByName("yt-dlp")
+	})
+
 	hello := widget.NewLabel("YouTube Simple DL!")
 	bottom := widget.NewLabel("")
 

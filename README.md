@@ -1,6 +1,6 @@
 # yt-simple-dl
 
-You can download mp4 (or convert to mp3) a Youtube video or a whole playlist.
+You can download mp4 (and convert to mp3) of a Youtube video.
 
 Installation: `go mod tidy`
 

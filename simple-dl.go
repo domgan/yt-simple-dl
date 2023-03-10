@@ -42,7 +42,7 @@ func downloadVideo(link string, audio bool) error {
 	}
 	defer os.Remove(path)
 
-	args := []string{link, "-f", "mp4", "-o", pwd() + "/%(title)s.%(ext)s"}
+	args := []string{link, "--no-playlist", "-f", "mp4", "-o", pwd() + "/%(title)s.%(ext)s"}
 	if audio {
 		ffmpegPath, err := downloadLatestFfmpeg(OS)
 		if err != nil {
