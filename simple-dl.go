@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -9,6 +11,8 @@ import (
 	"runtime"
 	"syscall"
 )
+
+var MODE string
 
 func pwd() string {
 	ex, err := os.Executable()
@@ -38,7 +42,7 @@ func downloadVideo(link string, audio bool) error {
 	}
 	defer os.Remove(path)
 
-	args := []string{link, "-o", pwd() + "/%(title)s"}
+	args := []string{link, "-f", "mp4", "-o", pwd() + "/%(title)s.%(ext)s"}
 	if audio {
 		ffmpegPath, err := downloadLatestFfmpeg(OS)
 		if err != nil {
@@ -51,19 +55,13 @@ func downloadVideo(link string, audio bool) error {
 	cmd := exec.Command(path, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
-	// todo add flag to not do below when it's passed for windows build
-	// // Create pipes to capture output from stdout and stderr
-	// var stdout bytes.Buffer
-	// var stderr bytes.Buffer
-	// cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-	// cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
-
-	// // Print the captured output
-	// log.Println("Command stdout:")
-	// log.Println(stdout.String())
-	// log.Println("Command stderr:")
-	// log.Println(stderr.String())
-
+	if MODE == "DEV" {
+		// Create pipes to capture output from stdout and stderr
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
+		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+	}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
