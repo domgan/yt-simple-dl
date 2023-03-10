@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"strings"
 
@@ -9,7 +10,10 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/atotto/clipboard"
 )
+
+var VERSION = "DEV"
 
 func downloadHandler(window fyne.Window, input *widget.Entry, check *widget.Check, bottom *widget.Label) {
 	if !strings.Contains(strings.ToLower(input.Text), "youtube.com") && !strings.Contains(input.Text, "youtu.be") {
@@ -34,14 +38,19 @@ func downloadHandler(window fyne.Window, input *widget.Entry, check *widget.Chec
 	}
 }
 
+func showUpdateDialog(window fyne.Window, newVersion string, updateLink string) {
+	content := container.NewVBox(
+		widget.NewLabel(fmt.Sprintf("%s -> %s", VERSION, newVersion)),
+		widget.NewButton("Kopiuj link", func() {
+			clipboard.WriteAll(updateLink)
+		}),
+	)
+	dialog.ShowCustom("Dostępna aktualizacja", "OK", content, window)
+}
+
 func main() {
 	a := app.New()
 	w := a.NewWindow("yt-simple-dl-gui")
-
-	w.SetOnClosed(func() {
-		log.Println("GUI window closed")
-		// killProcessByName("yt-dlp")
-	})
 
 	hello := widget.NewLabel("YouTube Simple DL!")
 	bottom := widget.NewLabel("")
@@ -66,5 +75,15 @@ func main() {
 
 	w.Resize(fyne.Size{Width: 350})
 	w.SetFixedSize(true)
+
+	go func() {
+		newVersion, updateLink, err := checkVersion(VERSION)
+		if err != nil {
+			log.Println("Error:", err)
+		} else if newVersion != "" {
+			showUpdateDialog(w, newVersion, updateLink)
+		}
+	}()
+
 	w.ShowAndRun()
 }

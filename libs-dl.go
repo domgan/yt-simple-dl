@@ -10,6 +10,14 @@ import (
 	"os"
 )
 
+type Release struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
+}
+
 func downloadLatestRelease(OS string) (string, error) {
 	// Get the latest release info from GitHub API
 	resp, err := http.Get("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest")
@@ -19,12 +27,7 @@ func downloadLatestRelease(OS string) (string, error) {
 	defer resp.Body.Close()
 
 	// Parse the release info to get the download URL for the executable
-	var release struct {
-		Assets []struct {
-			Name               string
-			BrowserDownloadURL string `json:"browser_download_url"`
-		}
-	}
+	var release Release
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", err
 	}
@@ -157,4 +160,28 @@ func unzip(source string, OS string) (string, error) {
 		return "", err
 	}
 	return f.Name(), nil
+}
+
+func checkVersion(currentVersion string) (string, string, error) {
+	// Get the latest release from GitHub
+	resp, err := http.Get("https://api.github.com/repos/domgan/yt-simple-dl/releases/latest")
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	var release Release
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return "", "", err
+	}
+
+	// Check if the latest release is newer than the current version
+	if release.TagName != currentVersion {
+		for _, asset := range release.Assets {
+			if asset.Name == "yt-simple-dl.exe" {
+				return release.TagName, asset.BrowserDownloadURL, nil
+			}
+		}
+	}
+	return "", "", nil
 }

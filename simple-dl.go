@@ -55,7 +55,7 @@ func downloadVideo(link string, audio bool) error {
 	cmd := exec.Command(path, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
-	if MODE == "DEV" {
+	if VERSION == "DEV" {
 		// Create pipes to capture output from stdout and stderr
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
