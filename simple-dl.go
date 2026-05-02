@@ -1,70 +1,65 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 )
 
-var MODE string
-
-func pwd() string {
-	ex, err := os.Executable()
-	if err != nil {
-		panic(err)
-	}
-	exPath := filepath.Dir(ex)
-	return exPath
-}
-
 func downloadVideo(link string, audio bool) error {
-	var OS string
-	switch runtime.GOOS {
-	case "darwin":
-		OS = "mac"
-	case "windows":
-		OS = "win"
-	case "android":
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+	if goos == "android" {
 		return fmt.Errorf("android is not supported yet")
-	default:
-		return fmt.Errorf("unknown OS")
 	}
 
-	path, err := downloadLatestRelease(OS)
+	path, err := downloadLatestRelease(goos, goarch)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(path)
 
-	args := []string{link, "--no-playlist", "-f", "mp4", "-o", pwd() + "/%(title)s.%(ext)s"}
+	dir, err := ensureDownloadDir()
+	if err != nil {
+		return fmt.Errorf("download folder: %w", err)
+	}
+	outPattern := filepath.Join(dir, "%(title)s.%(ext)s")
+
+	args := []string{link, "--no-playlist", "-f", "mp4", "-o", outPattern}
 	if audio {
-		ffmpegPath, err := downloadLatestFfmpeg(OS)
+		ffmpegPath, cleanup, err := resolveFFmpeg(goos, goarch)
 		if err != nil {
 			return err
 		}
-		defer os.Remove(ffmpegPath)
+		defer cleanup()
 
-		args = append(args, "-x", "--audio-format", "mp3", "--ffmpeg-location", ffmpegPath)
+		ffmpegDir := filepath.Dir(ffmpegPath)
+		args = append(args, "-x", "--audio-format", "mp3", "--ffmpeg-location", ffmpegDir)
 	}
 	cmd := exec.Command(path, args...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	setHideWindow(cmd)
 
 	if VERSION == "DEV" {
-		// Create pipes to capture output from stdout and stderr
-		var stdout bytes.Buffer
-		var stderr bytes.Buffer
-		cmd.Stdout = io.MultiWriter(os.Stdout, &stdout)
-		cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 	}
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 	log.Println("Download finished")
 	return nil
+}
+
+func resolveFFmpeg(goos, goarch string) (path string, cleanup func(), err error) {
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p, func() {}, nil
+	}
+	tmp, err := downloadLatestFfmpeg(goos, goarch)
+	if err != nil {
+		return "", nil, err
+	}
+	return tmp, func() { os.Remove(tmp) }, nil
 }

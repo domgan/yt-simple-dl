@@ -32,7 +32,6 @@ func downloadHandler(window fyne.Window, input *widget.Entry, check *widget.Chec
 		bottom.SetText("ERROR :(")
 		dialog.ShowError(err, window)
 		log.Println("Error:", err)
-		// log.Panic
 	} else {
 		bottom.SetText("POBRANE :)")
 	}

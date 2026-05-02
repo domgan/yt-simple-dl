@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - runner: macos-latest
+            goos: darwin
+            goarch: arm64
+          - runner: macos-13
+            goos: darwin
+            goarch: amd64
+          - runner: windows-latest
+            goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Fyne Linux dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgl1-mesa-dev libglu1-mesa-dev \
+            libx11-dev libxcursor-dev libxrandr-dev libxinerama-dev libxi-dev libxxf86vm-dev
+
+      - name: Install MinGW (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-pkg-config
+
+      - name: Add MinGW to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo "C:/msys64/mingw64/bin" >> "$GITHUB_PATH"
+
+      - name: Build binary
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME}"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            go build -trimpath -ldflags "-s -w -X main.VERSION=${VERSION}" -o "dist/yt-simple-dl.exe" .
+          else
+            go build -trimpath -ldflags "-s -w -X main.VERSION=${VERSION}" -o "dist/yt-simple-dl" .
+          fi
+
+      - name: Package archive (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          tar -C dist -czf "dist/yt-simple-dl_${VERSION}_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz" yt-simple-dl
+
+      - name: Package archive (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = "${{ github.ref_name }}"
+          Compress-Archive -LiteralPath "dist/yt-simple-dl.exe" -DestinationPath "dist/yt-simple-dl_${v}_windows_amd64.zip" -Force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/*

@@ -8,6 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 type Release struct {
@@ -18,152 +21,195 @@ type Release struct {
 	} `json:"assets"`
 }
 
-func downloadLatestRelease(OS string) (string, error) {
-	// Get the latest release info from GitHub API
+func downloadLatestRelease(goos, goarch string) (string, error) {
+	assetName, err := ytDlpReleaseAsset(goos, goarch)
+	if err != nil {
+		return "", err
+	}
+
 	resp, err := http.Get("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest")
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	// Parse the release info to get the download URL for the executable
 	var release Release
 	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
 		return "", err
 	}
-	var osName string
-	if OS == "mac" {
-		osName = "yt-dlp"
-	} else if OS == "win" {
-		osName = "yt-dlp.exe"
-	}
-	var url string
+
+	url := ""
 	for _, asset := range release.Assets {
-		if asset.Name == osName {
+		if asset.Name == assetName {
 			url = asset.BrowserDownloadURL
 			break
 		}
 	}
 	if url == "" {
-		return "", fmt.Errorf("no executable found for %s", OS)
+		return "", fmt.Errorf("no yt-dlp asset %q found for %s/%s", assetName, goos, goarch)
 	}
 
-	// Download the executable to a temporary file
 	resp, err = http.Get(url)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	f, err := os.CreateTemp("", fmt.Sprintf("*-%s", osName))
+
+	tmpPattern := "yt-dlp-*"
+	if ytDlpAssetIsZip(assetName) {
+		tmpPattern = "yt-dlp-*.zip"
+	}
+	f, err := os.CreateTemp("", tmpPattern)
 	if err != nil {
 		return "", err
 	}
-	err = os.Chmod(f.Name(), 0755)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
+	tmpPath := f.Name()
 	if _, err := io.Copy(f, resp.Body); err != nil {
+		f.Close()
+		os.Remove(tmpPath)
 		return "", err
 	}
-	log.Printf("yt-dlp path: %s", f.Name())
-	return f.Name(), nil
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return "", err
+	}
+
+	if ytDlpAssetIsZip(assetName) {
+		binPath, err := extractZipEntryByBasenames(tmpPath, []string{"yt-dlp", "yt-dlp.exe", "yt-dlp_linux_armv7l"})
+		os.Remove(tmpPath)
+		if err != nil {
+			return "", err
+		}
+		log.Printf("yt-dlp path: %s", binPath)
+		return binPath, nil
+	}
+
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		os.Remove(tmpPath)
+		return "", err
+	}
+	log.Printf("yt-dlp path: %s", tmpPath)
+	return tmpPath, nil
 }
 
-func downloadLatestFfmpeg(OS string) (string, error) { // todo usuwanie ffmpeg zip'a
-	// Get the latest release info from GitHub API
+func downloadLatestFfmpeg(goos, goarch string) (string, error) {
+	plat, err := ffbinariesPlatform(goos, goarch)
+	if err != nil {
+		return "", err
+	}
+
 	resp, err := http.Get("https://ffbinaries.com/api/v1/version/latest")
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	// Parse the release info to get the download URL for the executable
 	type FfbinariesResponse struct {
-		Version   string                       `json:"version"`
-		Permalink string                       `json:"permalink"`
-		Bin       map[string]map[string]string `json:"bin"`
+		Bin map[string]map[string]string `json:"bin"`
 	}
 	var ffbinariesResponse FfbinariesResponse
-	err = json.NewDecoder(resp.Body).Decode(&ffbinariesResponse)
-	if err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&ffbinariesResponse); err != nil {
 		return "", err
 	}
 
-	var osName string
-	if OS == "mac" {
-		osName = "osx-64"
-	} else if OS == "win" {
-		osName = "windows-64"
+	platformBin := ffbinariesResponse.Bin[plat]
+	if platformBin == nil {
+		return "", fmt.Errorf("ffbinaries: unknown platform %q", plat)
 	}
-	url := ffbinariesResponse.Bin[osName]["ffmpeg"]
+	url := platformBin["ffmpeg"]
 	if url == "" {
-		return "", fmt.Errorf("no executable found for %s", OS)
+		return "", fmt.Errorf("no ffmpeg URL for platform %q", plat)
 	}
 
-	// Download the executable to a temporary file
 	resp, err = http.Get(url)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	f, err := os.CreateTemp("", fmt.Sprintf("*-ffmpeg-%s.zip", osName))
+
+	zipFile, err := os.CreateTemp("", fmt.Sprintf("*-ffmpeg-%s.zip", plat))
 	if err != nil {
 		return "", err
 	}
-	defer func() {
-		f.Close()
-		os.Remove(f.Name())
-	}()
-	if _, err := io.Copy(f, resp.Body); err != nil {
+	zipPath := zipFile.Name()
+	if _, err := io.Copy(zipFile, resp.Body); err != nil {
+		zipFile.Close()
+		os.Remove(zipPath)
 		return "", err
 	}
-	path, err := unzip(f.Name(), OS)
+	if err := zipFile.Close(); err != nil {
+		os.Remove(zipPath)
+		return "", err
+	}
+
+	want := []string{"ffmpeg", "ffmpeg.exe"}
+	path, err := extractZipEntryByBasenames(zipPath, want)
+	os.Remove(zipPath)
 	if err != nil {
 		return "", err
 	}
-	err = os.Chmod(path, 0755)
-	if err != nil {
+	if err := os.Chmod(path, 0755); err != nil {
+		os.Remove(path)
 		return "", err
 	}
-	log.Printf("ffmpeg path: %s", f.Name())
-	f.Close()
-	os.Remove(f.Name())
+	log.Printf("ffmpeg path: %s", path)
 	return path, nil
 }
 
-func unzip(source string, OS string) (string, error) {
-	log.Printf("source: %s", source)
-	read, err := zip.OpenReader(source)
+func extractZipEntryByBasenames(zipPath string, basenames []string) (string, error) {
+	read, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return "", err
 	}
 	defer read.Close()
-	file := read.File[0]
-	open, err := file.Open()
-	if err != nil {
-		return "", err
+
+	want := make(map[string]struct{}, len(basenames))
+	for _, b := range basenames {
+		want[strings.ToLower(b)] = struct{}{}
 	}
-	var osName string
-	if OS == "mac" {
-		osName = "ffmpeg"
-	} else if OS == "win" {
-		osName = "ffmpeg.exe"
+
+	for _, file := range read.File {
+		if file.FileInfo().IsDir() {
+			continue
+		}
+		clean := filepath.Clean(file.Name)
+		if strings.Contains(clean, "..") {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(clean))
+		if _, ok := want[base]; !ok {
+			continue
+		}
+		out, err := os.CreateTemp("", fmt.Sprintf("*-%s", base))
+		if err != nil {
+			return "", err
+		}
+		outPath := out.Name()
+		rc, err := file.Open()
+		if err != nil {
+			out.Close()
+			os.Remove(outPath)
+			return "", err
+		}
+		_, copyErr := io.Copy(out, rc)
+		closeErr := rc.Close()
+		if err := out.Close(); err != nil && copyErr == nil {
+			copyErr = err
+		}
+		if copyErr != nil {
+			os.Remove(outPath)
+			return "", copyErr
+		}
+		if closeErr != nil {
+			os.Remove(outPath)
+			return "", closeErr
+		}
+		return outPath, nil
 	}
-	f, err := os.CreateTemp("", fmt.Sprintf("*-%s", osName))
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	_, err = f.ReadFrom(open)
-	if err != nil {
-		return "", err
-	}
-	return f.Name(), nil
+	return "", fmt.Errorf("no matching entry in zip %s (wanted basenames %v)", zipPath, basenames)
 }
 
 func checkVersion(currentVersion string) (string, string, error) {
-	// Get the latest release from GitHub
 	resp, err := http.Get("https://api.github.com/repos/domgan/yt-simple-dl/releases/latest")
 	if err != nil {
 		return "", "", err
@@ -175,12 +221,15 @@ func checkVersion(currentVersion string) (string, string, error) {
 		return "", "", err
 	}
 
-	// Check if the latest release is newer than the current version
-	if release.TagName != currentVersion {
-		for _, asset := range release.Assets {
-			if asset.Name == "yt-simple-dl.exe" {
-				return release.TagName, asset.BrowserDownloadURL, nil
-			}
+	latest := strings.TrimPrefix(release.TagName, "v")
+	cur := strings.TrimPrefix(currentVersion, "v")
+	if latest == cur || release.TagName == currentVersion {
+		return "", "", nil
+	}
+
+	for _, asset := range release.Assets {
+		if releaseArtifactMatchesUpdate(asset.Name, runtime.GOOS, runtime.GOARCH) {
+			return release.TagName, asset.BrowserDownloadURL, nil
 		}
 	}
 	return "", "", nil
