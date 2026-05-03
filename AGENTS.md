@@ -42,6 +42,7 @@ Linux desktop deps (Debian/Ubuntu) match [.github/workflows/ci.yml](.github/work
 
 ## Changelog
 
+- 2026-05-03: GitHub Actions upgraded (checkout v6, setup-go v6, artifacts v7/v8, goreleaser-action v7, action-gh-release v3).
 - 2026-05-03: AGENTS troubleshooting for gopls + fyne/CGO; workspace `CGO_ENABLED` for Go tools.
 - 2026-05-03: `go` directive 1.25; doc refresh.
 - 2026-05-03: Initial AGENTS.md (post cross-platform / CI work).

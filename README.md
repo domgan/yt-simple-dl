@@ -1,3 +1,5 @@
+[![CI](https://github.com/domgan/yt-simple-dl/actions/workflows/ci.yml/badge.svg)](https://github.com/domgan/yt-simple-dl/actions/workflows/ci.yml) [![Release](https://github.com/domgan/yt-simple-dl/actions/workflows/release.yml/badge.svg)](https://github.com/domgan/yt-simple-dl/actions/workflows/release.yml)
+
 # yt-simple-dl
 
 Desktop GUI for downloading YouTube videos as MP4 (optional MP3 via ffmpeg). Uses [yt-dlp](https://github.com/yt-dlp/yt-dlp) at runtime (downloaded automatically; no separate install).
